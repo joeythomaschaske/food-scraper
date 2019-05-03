@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "node-fetch": "^2.4.1",
-    "jsdom": "^15.0.0"
+    "jsdom": "^15.0.0",
+    "json2csv": "^4.5.1"
   }
 }

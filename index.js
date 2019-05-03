@@ -1,6 +1,7 @@
 const fetch = require('node-fetch');
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
+const { parse } = require('json2csv');
 
 const getCategoryLinks = async () => {
     const main = await fetch('https://www.foodnetwork.com/recipes/recipes-a-z');
@@ -80,13 +81,58 @@ const writeRecipes = async (recipes) => {
     fs.writeFileSync('./recipes.json', JSON.stringify(recipes), 'utf-8');
 }
 
+const createCSVs = async () => {
+    let recipesText = fs.readFileSync('./recipes.json');
+    let json = JSON.parse(recipesText);
+    let recipes = [];
+    let directions = [];
+    let ingredients = [];
+    json.forEach((recipe, index) => {
+        recipes.push({
+            id: index,
+            name: recipe.name.replace(/(?:\r\n|\r|\n)/g, '').trim(),
+            source: recipe.source.replace(/(?:\r\n|\r|\n)/g, '').trim()
+        });
+
+        recipe.ingredients.forEach((ingredient) => {
+            ingredients.push({
+                recipeId: index,
+                ingredient: ingredient.replace(/(?:\r\n|\r|\n)/g, '').trim()
+            });
+        });
+
+        recipe.directions.forEach((direction) => {
+            directions.push({
+                recipeId: index,
+                direction: direction.replace(/(?:\r\n|\r|\n)/g, '').trim()
+            });
+        });
+    });
+    let fields = ['id', 'name', 'source'];
+    const recipeCsv = parse(recipes, {fields});
+
+    fields = ['recipeId', 'ingredient'];
+    const ingredientCsv = parse(ingredients, {fields});
+
+    fields = ['recipeId', 'direction'];
+    const directionCsv = parse(directions, {fields});
+
+    fs.writeFileSync('./recipes.csv', recipeCsv, 'utf-8');
+    fs.writeFileSync('./ingredients.csv', ingredientCsv, 'utf-8');
+    fs.writeFileSync('./directions.csv', directionCsv, 'utf-8');
+
+
+}
+
 (async () => {
-    console.log('getting links');
-    const links = await getCategoryLinks();
-    console.log('getting recipe links');
-    const recipeLinks = await getRecipeLinks(links);
-    console.log('getting recipes');
-    const recipes = await getRecipes(recipeLinks);
-    console.log('writing recipes');
-    writeRecipes(recipes);
+    // console.log('getting links');
+    // const links = await getCategoryLinks();
+    // console.log('getting recipe links');
+    // const recipeLinks = await getRecipeLinks(links);
+    // console.log('getting recipes');
+    // const recipes = await getRecipes(recipeLinks);
+    // console.log('writing recipes');
+    // writeRecipes(recipes);
+    console.log('converting recipes to json');
+    await createCSVs();
 })();
