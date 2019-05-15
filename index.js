@@ -15,30 +15,30 @@ const getCategoryLinks = async () => {
     return links;
 };
 
-const getRecipeLinks = async (links) => {
+const getRecipeLinks = async (link) => {
     let recipes = [];
-    for (link of links) {
-        let allPagesScraped = false;
-        for (let i = 1; !allPagesScraped; i++) {
-            const page = link + '/p/' + i;
-            console.log('fetching: ' + page);
-            const main = await fetch(page);
-            const body = await main.text();
-            const document = new JSDOM(body).window.document;
-            const recipeElements = document.getElementsByClassName('m-PromoList__a-ListItem');
-            if (recipeElements.length == 0) {
-                allPagesScraped = true;
-            }
-            for (element of recipeElements) {
-                //if the link contains '/content/' skip it
-                //make sure link is a full url
+    let allPagesScraped = false;
+    for (let i = 1; !allPagesScraped; i++) {
+        const page = link + '/p/' + i;
+        console.log('fetching: ' + page);
+        const main = await fetch(page);
+        const body = await main.text();
+        const document = new JSDOM(body).window.document;
+        const recipeElements = document.getElementsByClassName('m-PromoList__a-ListItem');
+        if (recipeElements.length == 0) {
+            allPagesScraped = true;
+        }
+        for (element of recipeElements) {
+            const link = element.firstChild.getAttribute('href');
+            if (!link.includes('/content/')) {
                 recipes.push('https:' + element.firstChild.getAttribute('href'));
             }
-            if (recipes.length > 100) {
-                return recipes;
-            }
+        }
+        if (recipes.length > 100) {
+            return recipes;
         }
     }
+
     return recipes;
 };
 
@@ -55,6 +55,10 @@ const getRecipes = async (links) => {
         const rawTitle = document.getElementsByClassName('o-AssetTitle')[0];
         const rawIngredients = document.getElementsByClassName('o-Ingredients__a-Ingredient');
         const rawDirections = document.getElementsByClassName('o-Method__m-Step');
+        let rawImage = document.getElementsByClassName('o-RecipeLead')[0].getElementsByClassName('m-MediaBlock__a-Image a-Image')[0];
+        if (rawImage) {
+            rawImage = 'https:' + rawImage.getAttribute('src');
+        }
         let ingredients = [];
         let directions = [];
 
@@ -69,7 +73,8 @@ const getRecipes = async (links) => {
             name : rawTitle.textContent,
             ingredients : ingredients,
             directions: directions,
-            source: link
+            source: link,
+            imgSrc: rawImage
         };
         recipes.push(recipe);
         i += 1;
@@ -77,17 +82,11 @@ const getRecipes = async (links) => {
     return recipes;
 }
 
-const writeRecipes = async (recipes) => {
-    fs.writeFileSync('./recipes.json', JSON.stringify(recipes), 'utf-8');
-}
-
-const createCSVs = async () => {
-    let recipesText = fs.readFileSync('./recipes.json');
-    let json = JSON.parse(recipesText);
+const createCSVs = async (recipeJson, category) => {
     let recipes = [];
     let directions = [];
     let ingredients = [];
-    json.forEach((recipe, index) => {
+    recipeJson.forEach((recipe, index) => {
         recipes.push({
             id: index,
             name: recipe.name.replace(/(?:\r\n|\r|\n)/g, '').trim(),
@@ -108,7 +107,7 @@ const createCSVs = async () => {
             });
         });
     });
-    let fields = ['id', 'name', 'source'];
+    let fields = ['id', 'name', 'source', 'imageSrc'];
     const recipeCsv = parse(recipes, {fields});
 
     fields = ['recipeId', 'ingredient'];
@@ -117,22 +116,25 @@ const createCSVs = async () => {
     fields = ['recipeId', 'direction'];
     const directionCsv = parse(directions, {fields});
 
-    fs.writeFileSync('./recipes.csv', recipeCsv, 'utf-8');
-    fs.writeFileSync('./ingredients.csv', ingredientCsv, 'utf-8');
-    fs.writeFileSync('./directions.csv', directionCsv, 'utf-8');
-
-
+    //make file here for category links
+    fs.mkdirSync('./recipes/' + category);
+    fs.writeFileSync('./recipes/' + category + '/recipes.csv', recipeCsv, 'utf-8');
+    fs.writeFileSync('./recipes/' + category + '/ingredients.csv', ingredientCsv, 'utf-8');
+    fs.writeFileSync('./recipes/' + category + '/directions.csv', directionCsv, 'utf-8');
 }
 
 (async () => {
-    // console.log('getting links');
-    // const links = await getCategoryLinks();
-    // console.log('getting recipe links');
-    // const recipeLinks = await getRecipeLinks(links);
-    // console.log('getting recipes');
-    // const recipes = await getRecipes(recipeLinks);
-    // console.log('writing recipes');
-    // writeRecipes(recipes);
-    console.log('converting recipes to json');
-    await createCSVs();
+    console.log('getting links');
+    const links = await getCategoryLinks();
+    for (link of links) {
+        const savedLink = link;
+        console.log('getting recipe links');
+        const recipeLinks = await getRecipeLinks(link);
+        console.log('getting recipes');
+        const recipes = await getRecipes(recipeLinks);
+        console.log('converting recipes to json');
+        const urlSections = savedLink.split('/');
+        const category = urlSections[urlSections.length - 1];
+        await createCSVs(recipes, category);
+    }
 })();
